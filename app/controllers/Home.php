@@ -7,9 +7,8 @@ defined('ROOTPATH') OR exit('Access Denied!');
 /**
  * home class
  */
-class Home
+class Home extends Controller
 {
-	use MainController;
 
 	public function index()
 	{

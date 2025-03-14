@@ -4,12 +4,11 @@ namespace Controller;
 
 defined('ROOTPATH') OR exit('Access Denied!');
 
-class _404
+class _404 extends Controller
 {
-	use MainController;
 	
 	public function index()
 	{
-		echo "404 Page not found controller";
+		$this->view('404');
 	}
 }

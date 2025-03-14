@@ -4,21 +4,32 @@ namespace Controller;
 
 defined('ROOTPATH') OR exit('Access Denied!');
 
-Trait MainController
+class Controller
 {
 	// In app/Core/Controller.php
 
-	public function __construct()
-	{
-		$request = new \Core\Request();
+	// public function __construct()
+	// {
+	// 	$request = new \Core\Request();
 
-		if ($request->method() === 'POST' && !$request->validate_csrf()) {
-			die("CSRF Token validation failed!");
+	// 	if ($request->method() === 'POST' && !$request->validate_csrf()) {
+	// 		die("CSRF Token validation failed!");
+	// 	}
+	// }
+
+	protected function loadModel($model){
+
+		if(file_exists("../app/models/".$model.".php")){
+			
+			include "../app/models/".$model.".php";
+			return $model = new $model();
 		}
+
+		return false;
 	}
 
 
-	public function view($name, $data = [])
+	protected function view($name, $data = [])
 	{
 		$filename = "../app/views/".$name.".view.php";
 		if(file_exists($filename))
