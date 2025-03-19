@@ -29,9 +29,9 @@ class User
 			throw new \Exception("Password is required");
 		}
 		
-		// if(empty($data['terms'])) {
-		// 	throw new \Exception("You must agree to the terms and conditions");
-		// }
+		if(isset($data['terms']) && empty($data['terms'])) {
+			throw new \Exception("You must agree to the terms and conditions");
+		}
 
 		return true;
 	}
