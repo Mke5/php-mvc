@@ -17,5 +17,14 @@ $sh = new App\Sh\sh;
 if(empty($action)) {
     call_user_func_array([$sh, 'help'], []);
 } else {
-    call_user_func_array([$sh, $action],[]);
+
+    $action = explode(':', $action);
+    if(is_callable([$sh, $action[0]])){
+
+        call_user_func_array([$sh, $action[0]],[$argv]);
+    }else {
+        echo "Invalid command\n";
+        call_user_func_array([$sh, 'help'], []);
+    }
+
 }
