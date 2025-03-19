@@ -1,6 +1,6 @@
 <?php 
 
-namespace Model;
+namespace App\Models;
 
 defined('ROOTPATH') OR exit('Access Denied!');
 

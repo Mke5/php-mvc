@@ -113,9 +113,11 @@ class Session
 	public function generateCsrfToken(): string
 	{
 		$this->start_session();
+
 		if (!isset($_SESSION[$this->csrfkey])) {
 			$_SESSION[$this->csrfkey] = bin2hex(random_bytes(32));
 		}
+
 		return $_SESSION[$this->csrfkey];
 	}
 
@@ -123,26 +125,39 @@ class Session
 
 	public function csrf_token()
 	{
-		$this->start_session();
-		
-		if (empty($_SESSION['csrf_token'])) {
-			$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-		}
-
-		return $_SESSION['csrf_token'];
+		return $this->generateCsrfToken();
 	}
+
+	// public function validate_csrf($token)
+	// {
+	// 	$this->start_session();
+
+	// 	if (!hash_equals($_SESSION[$this->csrfkey], $token)) {
+	// 		die('CSRF token mismatch! Stored=' . $_SESSION[$this->csrfkey] . ' Sent=' . $token);
+	// 	}
+
+	// 	// if (isset($_SESSION[$this->csrfkey]) && hash_equals($_SESSION[$this->csrfkey], $token)) {
+	// 	// 	// Regenerate the token after validation for extra security
+	// 	// 	$_SESSION[$this->csrfkey] = bin2hex(random_bytes(32));
+	// 	// 	return true;
+	// 	// }
+
+	// 	return false;
+	// }
 
 	public function validate_csrf($token)
 	{
 		$this->start_session();
 
-		if (isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token)) {
-			// Regenerate the token after validation for extra security
-			$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-			return true;
+		if (!isset($_SESSION[$this->csrfkey])) {
+			die('CSRF token is missing from session.');
 		}
 
-		return false;
+		if (!hash_equals($_SESSION[$this->csrfkey], $token)) {
+			die('CSRF token mismatch! Stored=' . $_SESSION[$this->csrfkey] . ' Sent=' . $token);
+		}
+
+		return true;
 	}
 
 }
