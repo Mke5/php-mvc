@@ -1,7 +1,5 @@
 <?php 
 
-defined('ROOTPATH') OR exit('Access Denied!');
-
 /** check which php extensions are required **/
 check_extensions();
 function check_extensions()
@@ -70,7 +68,7 @@ function esc($str)
 
 function redirect($path)
 {
-	header("Location: " . ROOT."/".$path);
+	header("Location: " . ROOT_URL."/".$path);
 	exit();
 }
 
@@ -81,13 +79,13 @@ function get_image(mixed $file = '',string $type = 'post'):string
 	$file = $file ?? '';
 	if(file_exists($file))
 	{
-		return ROOT . "/". $file;
+		return ROOT_URL . "/". $file;
 	}
 
 	if($type == 'user'){
-		return ROOT."/assets/images/user.webp";
+		return ROOT_URL."/assets/images/user.webp";
 	}else{
-		return ROOT."/assets/images/no_image.jpg";
+		return ROOT_URL."/assets/images/no_image.jpg";
 	}
 
 }
@@ -218,7 +216,7 @@ function get_date($date)
 
 
 /** comverts image paths from relative to absolute **/
-function add_root_to_images($contents)
+function add_ROOT_URL_to_images($contents)
 {
 
   preg_match_all('/<img[^>]+>/', $contents, $matches);
@@ -230,7 +228,7 @@ function add_root_to_images($contents)
       if(!strstr($matches2[0], 'http'))
       {
       
-        $contents = str_replace($matches2[0], 'src="'.ROOT.'/'.str_replace('src="',"",$matches2[0]), $contents);
+        $contents = str_replace($matches2[0], 'src="'.ROOT_URL.'/'.str_replace('src="',"",$matches2[0]), $contents);
       }
     }
 
@@ -369,4 +367,3 @@ function delete_images_from_content(string $content, string $content_new = ''):v
   }
 
 }
-
