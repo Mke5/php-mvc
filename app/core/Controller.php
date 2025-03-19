@@ -6,16 +6,6 @@ defined('ROOTPATH') OR exit('Access Denied!');
 
 class Controller
 {
-	// In app/Core/Controller.php
-
-	// public function __construct()
-	// {
-	// 	$request = new \Core\Request();
-
-	// 	if ($request->method() === 'POST' && !$request->validate_csrf()) {
-	// 		die("CSRF Token validation failed!");
-	// 	}
-	// }
 
 	protected function loadModel($model){
 
@@ -37,11 +27,10 @@ class Controller
 			if (is_array($data)) {
 				extract($data);
 			}
-            require $filename;
+            require_once $filename;
 		}else{
-
 			$filename = "../app/views/404.view.php";
-			require $filename;
+			require_once $filename;
 		}
 	}
 }

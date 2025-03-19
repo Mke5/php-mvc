@@ -5,13 +5,19 @@ defined('ROOTPATH') OR exit('Access Denied!');
 if($_SERVER['SERVER_NAME'] == 'localhost')
 {
 	/** database config **/
-	define('DBNAME', 'my_db');
+	define('DBNAME', 'mvc');
 	define('DBHOST', 'localhost');
 	define('DBUSER', 'root');
 	define('DBPASS', '');
 	define('DBDRIVER', '');
 	
-	define('ROOT', 'http://localhost/mvc/public');
+	define('PROTOCOL', 'http');
+
+	$path = str_replace("\\", "/", PROTOCOL . "://" . $_SERVER['SERVER_NAME'] . __DIR__ . "/"); 
+    $path = str_replace($_SERVER['DOCUMENT_ROOT'], "", $path);
+
+    define('ROOT_URL', 'http://localhost/mvc');
+    define('ASSETS', str_replace("app/core", "public/assets", $path));
 
 }else
 {
@@ -22,7 +28,7 @@ if($_SERVER['SERVER_NAME'] == 'localhost')
 	define('DBPASS', '');
 	define('DBDRIVER', '');
 
-	define('ROOT', 'https://www.yourwebsite.com');
+	define('ROOT_URL', 'https://www.yourwebsite.com');
 
 }
 
