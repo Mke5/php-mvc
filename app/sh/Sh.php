@@ -363,10 +363,28 @@ class Sh
                         case "datetime":
                             $columns[] = "$columnName DATETIME NOT NULL";
                             break;
+                        case "float":
+                            $columns[] = "$columnName FLOAT NOT NULL";
+                            break;
+                        case "double":
+                            $columns[] = "$columnName DOUBLE NOT NULL";
+                            break;
+                        case "enum":
+                            $enumValues = isset($columnParts[2]) ? str_replace(";", ", ", $columnParts[2]) : "'yes', 'no'";
+                            $columns[] = "$columnName ENUM($enumValues) NOT NULL";
+                            break;
                         default:
                             echo $this->colorText("\nWarning: Unknown column type '{$columnType}'", "33") . "\n";
                             die();
                     }
+
+                    if (in_array("unique", $columnParts)) {
+                        $columns[] = "UNIQUE ($columnName)";
+                    }
+                    if (in_array("index", $columnParts)) {
+                        $columns[] = "INDEX ($columnName)";
+                    }
+
                 } else {
                     echo $this->colorText("\nWarning: Invalid column format for '{$args[$i]}'", "33") . "\n";
                     die();
