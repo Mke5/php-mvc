@@ -306,27 +306,137 @@ class Sh
 
     }
 
-    private function migration()
+    private function migration($args = [])
     {
-        echo 'controller class';
+        if (!isset($args[2])) {
+            echo $this->colorText("\nWarning: Please provide a table name", "33") . "\n";
+            die();
+        }
+    
+        $tableName = strtolower($args[2]);
+        $className = ucfirst($this->singularize($args[2])) . "Migration";
+    
+        // Default columns
+        $columns = [
+            "id INT AUTO_INCREMENT PRIMARY KEY",
+        ];
+
+        $columnEnd = [
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+            "deleted_at TIMESTAMP NULL DEFAULT NULL"
+        ];
+    
+        $foreignKeys = [];
+    
+        // Parse additional columns
+        if (count($args) > 3) {
+            for ($i = 3; $i < count($args); $i++) {
+                $columnParts = explode(":", $args[$i]);
+    
+                if (count($columnParts) >= 2) {
+                    [$columnName, $columnType] = $columnParts;
+                    $foreignTable = $columnParts[2] ?? null;
+    
+                    // Prevent self-referencing foreign keys
+                    if ($foreignTable && $foreignTable === $tableName) {
+                        echo $this->colorText("\nError: '$columnName' cannot reference the same table '$tableName'!", "31") . "\n";
+                        die();
+                    }
+    
+                    switch (strtolower($columnType)) {
+                        case "string":
+                            $columns[] = "$columnName VARCHAR(255) NOT NULL";
+                            break;
+                        case "text":
+                            $columns[] = "$columnName TEXT NOT NULL";
+                            break;
+                        case "integer":
+                            $columns[] = "$columnName INT NOT NULL";
+                            if ($foreignTable) {
+                                $foreignKeys[] = "FOREIGN KEY ($columnName) REFERENCES $foreignTable(id) ON DELETE CASCADE";
+                            }
+                            break;
+                        case "boolean":
+                            $columns[] = "$columnName TINYINT(1) NOT NULL DEFAULT 0";
+                            break;
+                        case "datetime":
+                            $columns[] = "$columnName DATETIME NOT NULL";
+                            break;
+                        default:
+                            echo $this->colorText("\nWarning: Unknown column type '{$columnType}'", "33") . "\n";
+                            die();
+                    }
+                } else {
+                    echo $this->colorText("\nWarning: Invalid column format for '{$args[$i]}'", "33") . "\n";
+                    die();
+                }
+            }
+        }
+
+        // Add foreign keys at the end
+        if (!empty($foreignKeys)) {
+            $columns = array_merge($columns, $foreignKeys);
+        }
+
+        $columns = array_merge($columns, $columnEnd);
+        
+    
+        // Format filename: create_{table}_table with timestamp
+        $filename = date('Ymd_His') . "_create_{$tableName}_table.php";
+        $filepath = CPATH . "app" . DS . "migrations" . DS . $filename;
+    
+        // Generate SQL
+        $sql = "CREATE TABLE {$tableName} (\n    " . implode(",\n    ", $columns) . "\n);";
+
+    
+        $migrationTemplate = <<<PHP
+        <?php
+    
+        namespace App\Migrations;
+    
+        defined('ROOTPATH') OR exit('Access Denied!');
+    
+        class {$className}
+        {
+            public function up()
+            {
+                return "{$sql}";
+            }
+    
+            public function down()
+            {
+                return "DROP TABLE IF EXISTS {$tableName};";
+            }
+        }
+        PHP;
+    
+        // Create the migration file
+        if (file_put_contents($filepath, $migrationTemplate) !== false) {
+            echo $this->colorText("\nSuccess: Migration '{$filename}' has been created!", "32") . "\n";
+        } else {
+            echo $this->colorText("\nError: Failed to create migration file!", "31") . "\n";
+            die();
+        }
+
     }
 
     public function make($command)
     {
         if (!isset($command[2])) {
-            echo $this->colorText("\nError: Missing argument. Usage: make:migration {name}", "31") . "\n";
+            echo $this->colorText("\nError: Missing argument. Usage: make:tool {name}", "31") . "\n";
             die();
         }
 
-         // Ensure the first character is a valid letter
+        // Ensure the first character is a valid letter
         if (!ctype_alpha($command[2])) {
-            echo $this->colorText("\nWarning: Migration name must start with a letter.", "33") . "\n";
+            echo $this->colorText("\nWarning: Tool name must start with a letter.", "33") . "\n";
             return;
         }
 
         switch ($command[1]) {
             case 'make:migration':
-                $this->migration($command[2]);
+                $this->migration($command);
                 break;
             case 'make:model':
                 $this->model($command[2]);
