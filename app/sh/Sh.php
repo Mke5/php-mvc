@@ -413,7 +413,7 @@ class Sh
     
         // Create the migration file
         if (file_put_contents($filepath, $migrationTemplate) !== false) {
-            echo $this->colorText("\nSuccess: Migration '{$filename}' has been created!", "32") . "\n";
+            echo $this->colorText("\nSuccess: Migration '{$filename}' ================ DONE!", "32") . "\n";
         } else {
             echo $this->colorText("\nError: Failed to create migration file!", "31") . "\n";
             die();
