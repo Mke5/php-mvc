@@ -153,10 +153,10 @@ class Sh
             die();
         }
 
-         // Convert name to PascalCase (if not already)
-        $className = ucfirst($this->singularize($name));
+        // Convert name to singular PascalCase
+        $className = ucfirst(rtrim($name, 's')); // Removes trailing 's' if present
 
-         // Define the file path
+        // Define the file path
         $modelPath = CPATH . "app" . DS . "models" . DS . "{$className}.php";
 
         // Check if the file already exists
@@ -165,41 +165,132 @@ class Sh
             die();
         }
 
+        $tableName = strtolower($className) . 's';
 
-        // Template for the model file
         $modelTemplate = <<<PHP
         <?php
-
+        
         namespace App\Models;
-
+        
         defined('ROOTPATH') OR exit('Access Denied!');
-
+        
         /**
-         * {$className} class
+         * {$className} Model
          */
         class {$className}
         {
             use Model;
             use Database;
-
-            protected \$table = 'users'; // Change to relevant table
-            protected \$allowedColumns = ['email', 'password'];
-
-            public function validate(\$data)
+        
+            protected \$table = '{$tableName}';
+            protected \$allowedColumns = [];
+        
+            /**
+             * Find a record by ID
+             */
+            public function findById(\$id)
             {
-                \$this->errors = [];
-
-                if(empty(\$data['email'])) {
-                    throw new \Exception("Email is required");
-                } elseif (!filter_var(\$data['email'], FILTER_VALIDATE_EMAIL)) {
-                    throw new \Exception("Invalid email format");
+                \$sql = "SELECT * FROM \$this->table WHERE id = :id LIMIT 1";
+                \$result = \$this->read(\$sql, ['id' => \$id]);
+                return \$result ? \$result[0] : false;
+            }
+        
+            /**
+             * Find records by a condition
+             */
+            public function findWhere(\$column, \$value)
+            {
+                \$sql = "SELECT * FROM \$this->table WHERE \$column = :value";
+                return \$this->read(\$sql, ['value' => \$value]);
+            }
+        
+            /**
+             * Insert a new record
+             */
+            public function insert(\$data)
+            {
+                \$keys = array_keys(\$data);
+                \$columns = implode(", ", \$keys);
+                \$placeholders = ":" . implode(", :", \$keys);
+        
+                \$sql = "INSERT INTO \$this->table (\$columns) VALUES (\$placeholders)";
+                return \$this->write(\$sql, \$data);
+            }
+        
+            /**
+             * Update a record by ID
+             */
+            public function update(\$id, \$data)
+            {
+                \$setPart = "";
+                foreach (\$data as \$key => \$value) {
+                    \$setPart .= "\$key = :\$key, ";
                 }
-
-                if(empty(\$data['password'])) {
-                    throw new \Exception("Password is required");
-                }
-
-                return true;
+                \$setPart = rtrim(\$setPart, ", ");
+                
+                \$sql = "UPDATE \$this->table SET \$setPart WHERE id = :id";
+                \$data['id'] = \$id;
+        
+                return \$this->write(\$sql, \$data);
+            }
+        
+            /**
+             * Delete a record by ID
+             */
+            public function deleteOne(\$id)
+            {
+                \$sql = "DELETE FROM \$this->table WHERE id = :id";
+                return \$this->write(\$sql, ['id' => \$id]);
+            }
+        
+            /**
+             * Delete all records
+             */
+            public function deleteAll()
+            {
+                \$sql = "DELETE FROM \$this->table";
+                return \$this->write(\$sql);
+            }
+        
+            /**
+             * Count total records
+             */
+            public function count()
+            {
+                \$sql = "SELECT COUNT(*) AS total FROM \$this->table";
+                \$result = \$this->read(\$sql);
+                return \$result ? \$result[0]->total : 0;
+            }
+        
+            /**
+             * Get the first record
+             */
+            public function first()
+            {
+                \$sql = "SELECT * FROM \$this->table ORDER BY id ASC LIMIT 1";
+                \$result = \$this->read(\$sql);
+                return \$result ? \$result[0] : false;
+            }
+        
+            /**
+             * Get the last record
+             */
+            public function last()
+            {
+                \$sql = "SELECT * FROM \$this->table ORDER BY id DESC LIMIT 1";
+                \$result = \$this->read(\$sql);
+                return \$result ? \$result[0] : false;
+            }
+        
+            /**
+             * Check if a record exists
+             */
+            public function exists(\$column, \$value)
+            {
+                \$sql = "SELECT COUNT(*) AS count FROM \$this->table WHERE \$column = :value";
+                \$result = \$this->read(\$sql, ['value' => \$value]);
+                
+                return \$result && \$result[0]->count > 0;
             }
         }
         PHP;
