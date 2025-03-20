@@ -5,7 +5,8 @@ namespace App\Sh;
 defined('CPATH') or exit('No direct script access allowed');
 
 require_once __DIR__ . "/../core/config.php";
-
+use PDO;
+use PDOException;
 
 class Sh
 {
@@ -461,21 +462,31 @@ class Sh
                 echo $this->colorText("\nError: Database name cannot be empty!", "31") . "\n";
                 die();
             }
-
-            echo $newDbName;
     
             // Update DBNAME in the config file
-            // $configContents = file_get_contents($configFile);
-            // $configContents = preg_replace(
-            //     "/define\('DBNAME', '.*?'\);/",
-            //     "define('DBNAME', '$newDbName');",
-            //     $configContents
-            // );
+            $configContents = file_get_contents($configFile);
+            $configContents = preg_replace(
+                "/define\('DBNAME', '.*?'\);/",
+                "define('DBNAME', '$newDbName');",
+                $configContents
+            );
     
-            // file_put_contents($configFile, $configContents);
-            // echo $this->colorText("\nSuccess: Database name updated in config file!", "32") . "\n";
+            file_put_contents($configFile, $configContents);
+            echo $this->colorText("\nSuccess: Database name updated in config file!", "32") . "\n";
     
-            // $currentDbName = $newDbName; // Use the new database name
+            $currentDbName = $newDbName;
+
+        }
+        
+        try {
+            $pdo = new PDO("mysql:host=" . DBHOST, DBUSER, DBPASS);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $sql = "CREATE DATABASE IF NOT EXISTS `$currentDbName`";
+            $pdo->exec($sql);
+    
+            echo $this->colorText("\nSuccess: Database '$currentDbName' created successfully!", "32") . "\n";
+        } catch (PDOException $e) {
+            echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
         }
 
 
