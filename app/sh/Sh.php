@@ -4,8 +4,12 @@ namespace App\Sh;
 
 defined('CPATH') or exit('No direct script access allowed');
 
+require_once __DIR__ . "/../core/config.php";
+
+
 class Sh
 {
+
     private $version = '1.0.0';
 
 
@@ -439,6 +443,44 @@ class Sh
 
     }
 
+    public function createDatabase(){
+
+        $configFile = CPATH. "app" . DS . "core" . DS . "config.php";
+        $currentDbName = DBNAME;
+        echo $this->colorText("\nCurrent database name: '$currentDbName'", "33") . "\n";
+        echo "Do you want to use this database? (yes/no): ";
+        
+        $handle = fopen("php://stdin", "r");
+        $response = trim(fgets($handle));
+    
+        if (strtolower($response) === 'no') {
+            echo "Enter new database name: ";
+            $newDbName = trim(fgets($handle));
+    
+            if (!$newDbName) {
+                echo $this->colorText("\nError: Database name cannot be empty!", "31") . "\n";
+                die();
+            }
+
+            echo $newDbName;
+    
+            // Update DBNAME in the config file
+            // $configContents = file_get_contents($configFile);
+            // $configContents = preg_replace(
+            //     "/define\('DBNAME', '.*?'\);/",
+            //     "define('DBNAME', '$newDbName');",
+            //     $configContents
+            // );
+    
+            // file_put_contents($configFile, $configContents);
+            // echo $this->colorText("\nSuccess: Database name updated in config file!", "32") . "\n";
+    
+            // $currentDbName = $newDbName; // Use the new database name
+        }
+
+
+    }
+
     public function make($command)
     {
         if (!isset($command[2])) {
@@ -463,14 +505,30 @@ class Sh
                 $this->controller($command[2]);
                 break;
             default:
-                die("Unknown mode: $command[1]");
+                die("Unknown command: $command[1]");
                 break;
         }
     }
 
-    public function db(){
-        echo 'db class';
+    public function db($command){
+
+        switch ($command[1]) {
+            case 'db:create':
+                $this->createDatabase($command);
+                break;
+            case 'db:drop':
+                $this->model($command[2]);
+                break;
+            case 'db:refresh':
+                $this->controller($command[2]);
+                break;
+            default:
+                die("Unknown command: $command[1]");
+                break;
+        }
     }
+
+
 
     public function migrate(){
         echo 'migrate class';
@@ -482,7 +540,7 @@ echo "
     Sh v$this->version Command Line Interface
 
     Database:
-        db:create               Create a new database
+        db:create               Create a new database => db:create databaseName
         db:refresh              Reset and re-run all migrations and seeds
         db:drop                 Drop a database
         db:migrate              Run all pending migrations
@@ -492,9 +550,9 @@ echo "
 
 
     Migrations:
-        make:migration             Create a new migration file
-        make:model                 Create a new model file
-        make:controller            Create a new controller file
+        make:migration             Create a new migration file   =>   make:migration fileName
+        make:model                 Create a new model file       =>   make:model modelName
+        make:controller            Create a new controller file  =>   make:controller controllerName
 ";
     }
 }

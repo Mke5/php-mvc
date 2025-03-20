@@ -6,6 +6,7 @@ if(PHP_SAPI !== 'cli') {
 
 define('DS', DIRECTORY_SEPARATOR);
 define('CPATH', __DIR__.DIRECTORY_SEPARATOR);
+define('ROOTPATH', __DIR__ . DS);
 chdir(CPATH);
 
 $action = $argv[1] ?? 'help';
@@ -19,6 +20,10 @@ if(empty($action)) {
 } else {
 
     $action = explode(':', $action);
+    if($action[0] == '--help') {
+        call_user_func_array([$sh, 'help'], []);
+        exit;
+    }
     if(is_callable([$sh, $action[0]])){
 
         call_user_func_array([$sh, $action[0]],[$argv]);

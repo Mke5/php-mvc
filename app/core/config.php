@@ -2,7 +2,13 @@
 
 defined('ROOTPATH') OR exit('Access Denied!');
 
-if($_SERVER['SERVER_NAME'] == 'localhost')
+// Check if the script is running from CLI
+$isCLI = (php_sapi_name() === 'cli');
+
+// Set defaults if running in CLI mode
+$serverName = $isCLI ? 'localhost' : ($_SERVER['SERVER_NAME'] ?? 'localhost');
+
+if($serverName == 'localhost')
 {
 	/** database config **/
 	define('DBNAME', 'mvc');
@@ -13,11 +19,13 @@ if($_SERVER['SERVER_NAME'] == 'localhost')
 	
 	define('PROTOCOL', 'http');
 
-	$path = str_replace("\\", "/", PROTOCOL . "://" . $_SERVER['SERVER_NAME'] . __DIR__ . "/"); 
-    $path = str_replace($_SERVER['DOCUMENT_ROOT'], "", $path);
+	if (!$isCLI) {
+        $path = str_replace("\\", "/", PROTOCOL . "://" . $_SERVER['SERVER_NAME'] . __DIR__ . "/"); 
+        $path = str_replace($_SERVER['DOCUMENT_ROOT'], "", $path);
 
-    define('ROOT_URL', 'http://localhost/mvc');
-    define('ASSETS', str_replace("app/core", "public/assets", $path));
+        define('ROOT_URL', 'http://localhost/mvc');
+        define('ASSETS', str_replace("app/core", "public/assets", $path));
+    }
 
 }else
 {
@@ -35,5 +43,5 @@ if($_SERVER['SERVER_NAME'] == 'localhost')
 define('APP_NAME', "My Webiste");
 define('APP_DESC', "Best website on the planet");
 
-/** true means show errors **/
+
 define('DEBUG', true);
