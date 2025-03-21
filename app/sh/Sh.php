@@ -317,6 +317,24 @@ class Sh
             echo $this->colorText("\nWarning: Please provide a table name", "33") . "\n";
             die();
         }
+
+
+        // Ensure database exists before proceeding
+        if (!$this->databaseExists(DBNAME)) {
+            echo $this->colorText("\nWarning: Database '" . DBNAME . "' does not exist!", "33") . "\n";
+            echo "Would you like to create it now? (yes/no): ";
+
+            $handle = fopen("php://stdin", "r");
+            $response = trim(fgets($handle));
+
+            if (strtolower($response) === 'yes') {
+                $this->createDatabase();
+            } else {
+                echo $this->colorText("\nError: Migration aborted. Database must be created first!", "31") . "\n";
+                die();
+            }
+        }
+
     
         $tableName = strtolower($args[2]);
         $className = ucfirst($this->singularize($args[2])) . "Migration";
@@ -433,16 +451,40 @@ class Sh
             }
         }
         PHP;
+
+
+        try {
+            $pdo = new PDO("mysql:host=" . DBHOST . ";dbname=" . DBNAME, DBUSER, DBPASS);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+            // Check if migration already exists in the database
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM migrations WHERE migration = ?");
+            $stmt->execute([$filename]);
+            $exists = $stmt->fetchColumn();
+    
+            if (!$exists) {
+                // Insert the migration into the migrations table
+                $stmt = $pdo->prepare("INSERT INTO migrations (migration) VALUES (?)");
+                $stmt->execute([$filename]);
+            }
+    
+            echo $this->colorText("\nSuccess: Migration '{$filename}' recorded in database!", "32") . "\n";
+    
+        } catch (PDOException $e) {
+            echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
+            die();
+        }
     
         // Create the migration file
         if (file_put_contents($filepath, $migrationTemplate) !== false) {
-            echo $this->colorText("\nSuccess: Migration '{$filename}' ================ DONE!", "32") . "\n";
+            echo $this->colorText("\nSuccess: Migration '{$filename}' ================ Created!", "32") . "\n";
         } else {
             echo $this->colorText("\nError: Failed to create migration file!", "31") . "\n";
             die();
         }
 
     }
+
 
     public function createDatabase(){
 
@@ -483,10 +525,23 @@ class Sh
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $sql = "CREATE DATABASE IF NOT EXISTS `$currentDbName`";
             $pdo->exec($sql);
-    
+
+            $pdo = new PDO("mysql:host=" . DBHOST . ";dbname=" . $currentDbName, DBUSER, DBPASS);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+            // Ensure the migrations table exists
+            $sql = "CREATE TABLE IF NOT EXISTS migrations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                migration VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )";
+            $pdo->exec($sql);
+            
             echo $this->colorText("\nSuccess: Database '$currentDbName' created successfully!", "32") . "\n";
+            return;
         } catch (PDOException $e) {
             echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
+            die();
         }
 
 
@@ -560,10 +615,39 @@ echo "
         db:status               Show the status of each migration
 
 
-    Migrations:
+    Make:
         make:migration             Create a new migration file   =>   make:migration fileName
         make:model                 Create a new model file       =>   make:model modelName
         make:controller            Create a new controller file  =>   make:controller controllerName
 ";
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    private function databaseExists($dbname)
+    {
+        try {
+            $pdo = new PDO("mysql:host=" . DBHOST, DBUSER, DBPASS);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+            $stmt = $pdo->query("SHOW DATABASES LIKE '$dbname'");
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
+            die();
+        }
+    }
+    
 }
