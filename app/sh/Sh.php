@@ -336,8 +336,6 @@ class Sh
         }
 
 
-
-
         // Determine the operation (create or alter) and get the actual table name.
         $operation = "create"; // default is create
         $tableArg = $args[2];
@@ -348,10 +346,10 @@ class Sh
         }
         $tableName = strtolower($tableArg);
 
-        if (!$this->tableMigrationExists($tableName)) {
-            echo $this->colorText("\nError: Cannot alter table '{$tableName}' because it does not exist!", "31") . "\n";
-            die();
-        }
+        // if (!$this->tableMigrationExists($tableName)) {
+        //     echo $this->colorText("\nError: Cannot alter table '{$tableName}' because it does not exist!", "31") . "\n";
+        //     die();
+        // }
 
         $className = ucfirst($this->singularize($tableArg)) . "Migration";
 
@@ -503,9 +501,9 @@ class Sh
                 // Insert the migration into the migrations table
                 $stmt = $pdo->prepare("INSERT INTO migrations (migration) VALUES (?)");
                 $stmt->execute([$filename]);
+                echo $this->colorText("\nSuccess: Migration '{$filename}' recorded in database!", "32") . "\n";
             }
     
-            echo $this->colorText("\nSuccess: Migration '{$filename}' recorded in database!", "32") . "\n";
     
         } catch (PDOException $e) {
             echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
@@ -567,6 +565,7 @@ class Sh
                 $sql = "CREATE TABLE IF NOT EXISTS migrations (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     migration VARCHAR(255) NOT NULL,
+                    executed BOOLEAN NOT NULL DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )";
                 $pdo->exec($sql);
@@ -593,6 +592,7 @@ class Sh
                 $sql = "CREATE TABLE IF NOT EXISTS migrations (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     migration VARCHAR(255) NOT NULL,
+                    executed BOOLEAN NOT NULL DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )";
                 $pdo->exec($sql);
@@ -648,21 +648,15 @@ class Sh
                 $this->createDatabase();
                 break;
             case 'db:drop':
-                $this->model($command[2]);
+                $this->dbDrop();
                 break;
-            case 'db:refresh':
-                $this->controller($command[2]);
+            case 'db:migrate':
+                $this->dbMigrate();
                 break;
             default:
                 die("Unknown command: $command[1]");
                 break;
         }
-    }
-
-
-
-    public function migrate(){
-        echo 'migrate class';
     }
 
     public function help() {
@@ -694,14 +688,77 @@ Migration:
 
 
 
+    public function dbMigrate()
+    {
+        $pdo = $this->connectDatabase();
+
+        // Get all pending migrations
+        $pendingMigrations = $this->getPendingMigrations($pdo);
+
+        if (empty($pendingMigrations)) {
+            echo $this->colorText("\nAll migrations are up to date!", "32") . "\n";
+            return;
+        }
+
+        foreach ($pendingMigrations as $migration) {
+            $migrationFile = $migration['migration'];
+            $migrationPath = CPATH . "app" . DS . "migrations" . DS . $migrationFile;
+
+            if (!file_exists($migrationPath)) {
+                echo $this->colorText("\nError: Migration file not found: $migrationFile", "31") . "\n";
+                continue;
+            }
+
+            require_once $migrationPath;
+
+            // Extract class name from file
+            $className = $this->getClassNameFromFile($migrationPath);
+
+            if (!$className) {
+                echo $this->colorText("\nError: Could not determine class name in $migrationFile", "31") . "\n";
+                continue;
+            }
+
+            echo $this->colorText("\nMigrating: $className...", "34");
+
+            $migrationClass = new $className();
+            $migrationClass->up();
+
+            $this->markMigrationAsExecuted($pdo, $migrationFile);
+
+            echo $this->colorText(" ✓ Done", "32") . "\n";
+        }
+
+        echo $this->colorText("\nMigration completed successfully!", "32") . "\n";
+    }
+
+
+    
+    private function getPendingMigrations($pdo)
+    {
+        $stmt = $pdo->query("SELECT * FROM migrations WHERE executed = 0 ORDER BY id ASC");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    
+    private function markMigrationAsExecuted($pdo, $migrationName)
+    {
+        $stmt = $pdo->prepare("UPDATE migrations SET executed = 1 WHERE migration = :migration");
+        $stmt->execute(['migration' => $migrationName]);
+    }
+    
 
 
 
-
-
-
-
-
+    private function connectDatabase()
+    {
+        try {
+            return new PDO("mysql:host=" . DBHOST . ";dbname=" . DBNAME, DBUSER, DBPASS, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+            ]);
+        } catch (PDOException $e) {
+            die($this->colorText("\nDatabase Connection Error: " . $e->getMessage(), "31"));
+        }
+    }
 
 
     private function databaseExists($dbname)
@@ -717,18 +774,13 @@ Migration:
             die();
         }
     }
-
-
-
-
-    /**
-     * Check if a migration file already exists for a table.
-     */
+    
     private function tableMigrationExists($tableName)
     {
         $migrationPath = CPATH . "app" . DS . "migrations";
         $files = array_diff(scandir($migrationPath), ['..', '.']);
-
+        print_r( $files);
+        die;
         foreach ($files as $file) {
             if (strpos($file, "create_{$tableName}_table") !== false) {
                 return true;
@@ -738,4 +790,70 @@ Migration:
         return false;
     }
     
+    private function dbDrop()
+    {
+        $dbName = DBNAME;
+
+        echo $this->colorText("\nWarning: You are about to drop the database '$dbName'.", "33") . "\n";
+        echo "Are you sure? This action is irreversible! (yes/no): ";
+
+        $handle = fopen("php://stdin", "r");
+        $response = trim(fgets($handle));
+
+        if (strtolower($response) === 'no') {
+            echo $this->colorText("\nOperation canceled. Database '$dbName' was not dropped.", "32") . "\n";
+            return;
+        }elseif (strtolower($response) === 'yes'){
+
+            try {
+                $pdo = new PDO("mysql:host=" . DBHOST, DBUSER, DBPASS);
+                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+                // Check if the database exists
+                $stmt = $pdo->query("SHOW DATABASES LIKE '$dbName'");
+                $dbExists = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+                if (!$dbExists) {
+                    echo $this->colorText("\nError: Database '$dbName' does not exist!", "31") . "\n";
+                    return;
+                }
+    
+                // Drop the database
+                $pdo->exec("DROP DATABASE `$dbName`");
+    
+                echo $this->colorText("\nSuccess: Database '$dbName' has been dropped!", "32") . "\n";
+            } catch (PDOException $e) {
+                echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
+            }
+
+        }else {
+            echo $this->colorText("\nError: Invalid response. Aborting...", "31") . "\n";
+            die();
+        }
+    }
+
+
+    private function getClassNameFromFile($filePath)
+    {
+        $contents = file_get_contents($filePath);
+        
+        // Match namespace
+        $namespace = null;
+        if (preg_match('/namespace\s+([^;]+);/', $contents, $matches)) {
+            $namespace = trim($matches[1]);
+        }
+
+        // Match class name
+        if (preg_match('/class\s+([a-zA-Z0-9_]+)/', $contents, $matches)) {
+            $className = trim($matches[1]);
+
+            // If there's a namespace, append it to the class name
+            return $namespace ? $namespace . "\\" . $className : $className;
+        }
+
+        return null;
+    }
+
+
+
 }
