@@ -313,13 +313,13 @@ class Sh
 
     private function migration($args = [])
     {
+        // Check if at least the table name is provided.
         if (!isset($args[2])) {
             echo $this->colorText("\nWarning: Please provide a table name", "33") . "\n";
             die();
         }
 
-
-        // Ensure database exists before proceeding
+          // Ensure database exists before proceeding
         if (!$this->databaseExists(DBNAME)) {
             echo $this->colorText("\nWarning: Database '" . DBNAME . "' does not exist!", "33") . "\n";
             echo "Would you like to create it now? (yes/no): ";
@@ -335,38 +335,72 @@ class Sh
             }
         }
 
-    
-        $tableName = strtolower($args[2]);
-        $className = ucfirst($this->singularize($args[2])) . "Migration";
-    
-        // Default columns
-        $columns = [
-            "id INT AUTO_INCREMENT PRIMARY KEY",
-        ];
 
-        $columnEnd = [
+
+
+        // Determine the operation (create or alter) and get the actual table name.
+        $operation = "create"; // default is create
+        $tableArg = $args[2];
+        if (stripos($tableArg, "alter:") === 0) {
+            $operation = "alter";
+            // Remove "alter:" prefix to get the table name.
+            $tableArg = substr($tableArg, strlen("alter:"));
+        }
+        $tableName = strtolower($tableArg);
+
+        if (!$this->tableMigrationExists($tableName)) {
+            echo $this->colorText("\nError: Cannot alter table '{$tableName}' because it does not exist!", "31") . "\n";
+            die();
+        }
+
+        $className = ucfirst($this->singularize($tableArg)) . "Migration";
+
+        // Set the migrations folder path.
+        $migrationPath = CPATH . "app" . DS . "migrations";
+
+        // If operation is "create", check for duplicate creation migrations.
+        if ($operation === "create") {
+            $existing = glob($migrationPath . DS . "*_create_{$tableName}_table.php");
+            if (count($existing) > 0) {
+                echo $this->colorText("\nError: Migration for table '{$tableName}' already exists.", "31") . "\n";
+                echo "'make:migration alter:{$tableName} ...' to modify the table.\n";
+                die();
+            }
+        }
+
+        // Generate filename based on operation.
+        if ($operation === "create") {
+            $filename = date('Ymd_His') . "_create_{$tableName}_table.php";
+        } else {
+            $filename = date('Ymd_His') . "_alter_{$tableName}_table.php";
+        }
+        $filepath = $migrationPath . DS . $filename;
+
+        // Default columns for creation migration.
+        $defaultColumns = [
+            "id INT AUTO_INCREMENT PRIMARY KEY",
             "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
             "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
             "deleted_at TIMESTAMP NULL DEFAULT NULL"
         ];
-    
-        $foreignKeys = [];
-    
-        // Parse additional columns
+
+        // Initialize an array to hold column definitions.
+        $columns = [];
+
+        // Parse additional columns if provided (starting from index 3).
         if (count($args) > 3) {
             for ($i = 3; $i < count($args); $i++) {
                 $columnParts = explode(":", $args[$i]);
-    
                 if (count($columnParts) >= 2) {
                     [$columnName, $columnType] = $columnParts;
                     $foreignTable = $columnParts[2] ?? null;
-    
-                    // Prevent self-referencing foreign keys
+
+                    // Prevent self-referencing foreign keys.
                     if ($foreignTable && $foreignTable === $tableName) {
                         echo $this->colorText("\nError: '$columnName' cannot reference the same table '$tableName'!", "31") . "\n";
                         die();
                     }
-    
+
                     switch (strtolower($columnType)) {
                         case "string":
                             $columns[] = "$columnName VARCHAR(255) NOT NULL";
@@ -377,7 +411,7 @@ class Sh
                         case "integer":
                             $columns[] = "$columnName INT NOT NULL";
                             if ($foreignTable) {
-                                $foreignKeys[] = "FOREIGN KEY ($columnName) REFERENCES $foreignTable(id) ON DELETE CASCADE";
+                                $columns[] = "FOREIGN KEY ($columnName) REFERENCES $foreignTable(id) ON DELETE CASCADE";
                             }
                             break;
                         case "boolean":
@@ -393,6 +427,7 @@ class Sh
                             $columns[] = "$columnName DOUBLE NOT NULL";
                             break;
                         case "enum":
+                            // If a foreign table is given here, ignore it for enums.
                             $enumValues = isset($columnParts[2]) ? str_replace(";", ", ", $columnParts[2]) : "'yes', 'no'";
                             $columns[] = "$columnName ENUM($enumValues) NOT NULL";
                             break;
@@ -401,13 +436,13 @@ class Sh
                             die();
                     }
 
+                    // Check for unique or index constraints.
                     if (in_array("unique", $columnParts)) {
                         $columns[] = "UNIQUE ($columnName)";
                     }
                     if (in_array("index", $columnParts)) {
                         $columns[] = "INDEX ($columnName)";
                     }
-
                 } else {
                     echo $this->colorText("\nWarning: Invalid column format for '{$args[$i]}'", "33") . "\n";
                     die();
@@ -415,36 +450,38 @@ class Sh
             }
         }
 
-        // Add foreign keys at the end
-        if (!empty($foreignKeys)) {
-            $columns = array_merge($columns, $foreignKeys);
+        // For creation migrations, add default columns.
+        if ($operation === "create") {
+            $columns = array_merge($columns, $defaultColumns);
+        } else {
+            // For alter migrations, you might not automatically add defaults.
+            // You could allow the user to specify all changes manually.
         }
 
-        $columns = array_merge($columns, $columnEnd);
-        
-    
-        // Format filename: create_{table}_table with timestamp
-        $filename = date('Ymd_His') . "_create_{$tableName}_table.php";
-        $filepath = CPATH . "app" . DS . "migrations" . DS . $filename;
-    
-        // Generate SQL
+        // Generate the final SQL query.
         $sql = "CREATE TABLE {$tableName} (\n    " . implode(",\n    ", $columns) . "\n);";
+        if ($operation === "alter") {
+            $sql = "ALTER TABLE {$tableName} \n    " . implode(",\n    ", $columns) . ";";
+        }
 
-    
+
+
+
+        // Create migration file content.
         $migrationTemplate = <<<PHP
         <?php
-    
+
         namespace App\Migrations;
-    
+
         defined('ROOTPATH') OR exit('Access Denied!');
-    
+
         class {$className}
         {
             public function up()
             {
                 return "{$sql}";
             }
-    
+
             public function down()
             {
                 return "DROP TABLE IF EXISTS {$tableName};";
@@ -474,17 +511,16 @@ class Sh
             echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
             die();
         }
-    
-        // Create the migration file
+
+
+        // Create the migration file.
         if (file_put_contents($filepath, $migrationTemplate) !== false) {
-            echo $this->colorText("\nSuccess: Migration '{$filename}' ================ Created!", "32") . "\n";
+            echo $this->colorText("\nSuccess: Migration '{$filename}' has been created successfully!", "32") . "\n";
         } else {
             echo $this->colorText("\nError: Failed to create migration file!", "31") . "\n";
             die();
         }
-
     }
-
 
     public function createDatabase(){
 
@@ -518,31 +554,60 @@ class Sh
     
             $currentDbName = $newDbName;
 
-        }
-        
-        try {
-            $pdo = new PDO("mysql:host=" . DBHOST, DBUSER, DBPASS);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            $sql = "CREATE DATABASE IF NOT EXISTS `$currentDbName`";
-            $pdo->exec($sql);
+            try {
+                $pdo = new PDO("mysql:host=" . DBHOST, DBUSER, DBPASS);
+                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $sql = "CREATE DATABASE IF NOT EXISTS `$currentDbName`";
+                $pdo->exec($sql);
+    
+                $pdo = new PDO("mysql:host=" . DBHOST . ";dbname=" . $currentDbName, DBUSER, DBPASS);
+                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+                // Ensure the migrations table exists
+                $sql = "CREATE TABLE IF NOT EXISTS migrations (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    migration VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )";
+                $pdo->exec($sql);
+                
+                echo $this->colorText("\nSuccess: Database '$currentDbName' created successfully!", "32") . "\n";
+                return;
+            } catch (PDOException $e) {
+                echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
+                die();
+            }
 
-            $pdo = new PDO("mysql:host=" . DBHOST . ";dbname=" . $currentDbName, DBUSER, DBPASS);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        }elseif (strtolower($response) === 'yes'){
 
-            // Ensure the migrations table exists
-            $sql = "CREATE TABLE IF NOT EXISTS migrations (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                migration VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )";
-            $pdo->exec($sql);
-            
-            echo $this->colorText("\nSuccess: Database '$currentDbName' created successfully!", "32") . "\n";
-            return;
-        } catch (PDOException $e) {
-            echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
+            try {
+                $pdo = new PDO("mysql:host=" . DBHOST, DBUSER, DBPASS);
+                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $sql = "CREATE DATABASE IF NOT EXISTS `$currentDbName`";
+                $pdo->exec($sql);
+    
+                $pdo = new PDO("mysql:host=" . DBHOST . ";dbname=" . $currentDbName, DBUSER, DBPASS);
+                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+                // Ensure the migrations table exists
+                $sql = "CREATE TABLE IF NOT EXISTS migrations (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    migration VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )";
+                $pdo->exec($sql);
+                
+                echo $this->colorText("\nSuccess: Database '$currentDbName' created successfully!", "32") . "\n";
+                return;
+            } catch (PDOException $e) {
+                echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
+                die();
+            }
+        }else {
+            echo $this->colorText("\nError: Invalid response. Aborting...", "31") . "\n";
             die();
         }
+        
 
 
     }
@@ -555,7 +620,7 @@ class Sh
         }
 
         // Ensure the first character is a valid letter
-        if (!ctype_alpha($command[2])) {
+        if (!ctype_alpha($command[2][0])) {
             echo $this->colorText("\nWarning: Tool name must start with a letter.", "33") . "\n";
             return;
         }
@@ -580,7 +645,7 @@ class Sh
 
         switch ($command[1]) {
             case 'db:create':
-                $this->createDatabase($command);
+                $this->createDatabase();
                 break;
             case 'db:drop':
                 $this->model($command[2]);
@@ -603,22 +668,25 @@ class Sh
     public function help() {
 
 echo "
-    Sh v$this->version Command Line Interface
+Sh v$this->version Command Line Interface (CLI) Php MVC Tool
 
-    Database:
-        db:create               Create a new database => db:create databaseName
-        db:refresh              Reset and re-run all migrations and seeds
-        db:drop                 Drop a database
-        db:migrate              Run all pending migrations
-        db:seed                 Seed the database with records
-        db:rollback             Rollback the last database migration
-        db:status               Show the status of each migration
+Database:
+    db:create               Creates a new database          =>   db:create
+    db:drop                 Drops a database                =>   db:drop
+    db:migrate              Run all pending migrations      =>   db:migrate
+    db:seed                 Seed the database with records
 
 
-    Make:
-        make:migration             Create a new migration file   =>   make:migration fileName
-        make:model                 Create a new model file       =>   make:model modelName
-        make:controller            Create a new controller file  =>   make:controller controllerName
+Make:
+    make:migration             Create a new migration file   =>   make:migration fileName
+    make:model                 Create a new model file       =>   make:model modelName
+    make:controller            Create a new controller file  =>   make:controller controllerName
+
+Migration:
+    migrate:status              Show the status of each migration
+    migrate:refresh             Reset and re-run all migrations
+    migrate:rollback            Rollback the last database migration
+    migrate:reset               Rollback all database migrations
 ";
     }
 
@@ -648,6 +716,26 @@ echo "
             echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
             die();
         }
+    }
+
+
+
+
+    /**
+     * Check if a migration file already exists for a table.
+     */
+    private function tableMigrationExists($tableName)
+    {
+        $migrationPath = CPATH . "app" . DS . "migrations";
+        $files = array_diff(scandir($migrationPath), ['..', '.']);
+
+        foreach ($files as $file) {
+            if (strpos($file, "create_{$tableName}_table") !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
     
 }
