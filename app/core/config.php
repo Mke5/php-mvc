@@ -29,7 +29,7 @@ if($serverName == 'localhost')
 }else
 {
 	/** database config **/
-	define('DBNAME', 'new');
+	define('DBNAME', 'mvc');
 	define('DBHOST', 'localhost');
 	define('DBUSER', 'root');
 	define('DBPASS', '');
