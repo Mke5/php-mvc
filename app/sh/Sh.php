@@ -346,12 +346,9 @@ class Sh
         }
         $tableName = strtolower($tableArg);
 
-        // if (!$this->tableMigrationExists($tableName)) {
-        //     echo $this->colorText("\nError: Cannot alter table '{$tableName}' because it does not exist!", "31") . "\n";
-        //     die();
-        // }
+        $className = "Create".$this->singularize($tableArg)."Table";
 
-        $className = ucfirst($this->singularize($tableArg)) . "Migration";
+        $operation === "alter" ? $className = "Alter".$this->singularize($tableArg)."Table" : $className;
 
         // Set the migrations folder path.
         $migrationPath = CPATH . "app" . DS . "migrations";
@@ -451,18 +448,14 @@ class Sh
         // For creation migrations, add default columns.
         if ($operation === "create") {
             $columns = array_merge($columns, $defaultColumns);
+            $sql = "CREATE TABLE {$tableName} (\n    " . implode(",\n    ", $columns) . "\n);";
         } else {
-            // For alter migrations, you might not automatically add defaults.
-            // You could allow the user to specify all changes manually.
+            $alterQueries = [];
+            foreach ($columns as $column) {
+                $alterQueries[] = "ADD " . $column;
+            }
+            $sql = "ALTER TABLE {$tableName} \n    " . implode(",\n    ", array_merge($alterQueries, $foreignKeys)) . ";";
         }
-
-        // Generate the final SQL query.
-        $sql = "CREATE TABLE {$tableName} (\n    " . implode(",\n    ", $columns) . "\n);";
-        if ($operation === "alter") {
-            $sql = "ALTER TABLE {$tableName} \n    " . implode(",\n    ", $columns) . ";";
-        }
-
-
 
 
         // Create migration file content.
@@ -569,6 +562,16 @@ class Sh
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )";
                 $pdo->exec($sql);
+
+                $migrationPath = CPATH . "app" . DS . "migrations" . DS;
+                $files = array_diff(scandir($migrationPath), ['.', '..']);
+                if(is_dir($migrationPath) && !empty($files)){
+                    natsort($files);
+                    foreach ($files as $file) {
+                        $sql = "INSERT INTO migrations (migration) VALUES ('$file')";
+                        $pdo->exec($sql);
+                    }
+                }
                 
                 echo $this->colorText("\nSuccess: Database '$currentDbName' created successfully!", "32") . "\n";
                 return;
@@ -596,6 +599,16 @@ class Sh
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )";
                 $pdo->exec($sql);
+
+                $migrationPath = CPATH . "app" . DS . "migrations" . DS;
+                $files = array_diff(scandir($migrationPath), ['.', '..']);
+                if(is_dir($migrationPath) && !empty($files)){
+                    natsort($files);
+                    foreach ($files as $file) {
+                        $sql = "INSERT INTO migrations (migration) VALUES ('$file')";
+                        $pdo->exec($sql);
+                    }
+                }
                 
                 echo $this->colorText("\nSuccess: Database '$currentDbName' created successfully!", "32") . "\n";
                 return;
@@ -653,6 +666,9 @@ class Sh
             case 'db:migrate':
                 $this->dbMigrate();
                 break;
+            case 'db:seed':
+                $this->dbSeed();
+                break;
             default:
                 die("Unknown command: $command[1]");
                 break;
@@ -682,6 +698,25 @@ Migration:
     migrate:rollback            Rollback the last database migration
     migrate:reset               Rollback all database migrations
 ";
+    }
+
+
+    private function dbSeed(){
+        $migrationPath = CPATH . "app" . DS . "migrations" . DS;
+        $files = scandir($migrationPath);
+
+        // Filter only .php files and ignore "." and ".."
+        $migrationFiles = array_filter($files, function ($file) {
+            return $file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'php';
+        });
+
+        // Sort files in ascending order (oldest migrations first)
+        natsort($migrationFiles);
+
+        foreach ($migrationFiles as $file) {
+            echo "Migration File: " . $file . "\n";
+        }
+
     }
 
 
@@ -719,17 +754,24 @@ Migration:
                 continue;
             }
 
-            echo $this->colorText("\nMigrating: $className...", "34");
+            echo $this->colorText("\nMigrating: $migrationFile...", "34");
 
             $migrationClass = new $className();
-            $migrationClass->up();
+            $sql = $migrationClass->up();
 
-            $this->markMigrationAsExecuted($pdo, $migrationFile);
+            $pdo = $this->connectDatabase();
+            if($pdo->query($sql)){
 
-            echo $this->colorText(" ✓ Done", "32") . "\n";
+                $this->markMigrationAsExecuted($pdo, $migrationFile);
+                echo $this->colorText(" ✓ Done", "32") . "\n";
+            }
+            echo $sql;
+            
+            
         }
-
+        
         echo $this->colorText("\nMigration completed successfully!", "32") . "\n";
+        die();
     }
 
 
@@ -773,21 +815,6 @@ Migration:
             echo $this->colorText("\nError: " . $e->getMessage(), "31") . "\n";
             die();
         }
-    }
-    
-    private function tableMigrationExists($tableName)
-    {
-        $migrationPath = CPATH . "app" . DS . "migrations";
-        $files = array_diff(scandir($migrationPath), ['..', '.']);
-        print_r( $files);
-        die;
-        foreach ($files as $file) {
-            if (strpos($file, "create_{$tableName}_table") !== false) {
-                return true;
-            }
-        }
-
-        return false;
     }
     
     private function dbDrop()
